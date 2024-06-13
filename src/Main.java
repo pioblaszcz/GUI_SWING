@@ -1,12 +1,16 @@
 import javax.swing.*;
-import javax.swing.border.Border;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.*;
 import java.util.ArrayList;
 
 public class Main extends JFrame {
-    MyPanel panel = new MyPanel();
+    private String currentAppTitle = "Simple Draw";
+    private String fileLoadedPath;
     JLabel modeLabel = new JLabel("Circle");
+    JLabel statusLabel = new JLabel("New");
+    MyPanel panel = new MyPanel(this.statusLabel);
     public static void main(String[] args) {
         new Main();
     }
@@ -14,7 +18,7 @@ public class Main extends JFrame {
     public Main(){
         this.setMenuPanel();
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        this.setTitle("Simple draw");
+        this.setTitle(this.currentAppTitle);
         this.setLocationRelativeTo(null);
         this.setLayout(new BorderLayout());
         this.add(panel, BorderLayout.CENTER);
@@ -25,6 +29,9 @@ public class Main extends JFrame {
 
     }
 
+    private void updateTitle() {
+        this.setTitle(this.currentAppTitle);
+    }
     private void setMenuPanel(){
         JMenuBar menuBar = new JMenuBar();
 
@@ -37,28 +44,79 @@ public class Main extends JFrame {
         fileMenu.add(openMenuItem);
         fileMenu.add(saveMenuItem);
         fileMenu.add(saveAsMenuItem);
+        fileMenu.addSeparator();
         fileMenu.add(quitMenuItem);
 
-//        saveMenuItem.addActionListener(new ActionListener() {
-//            @Override
-//            public void actionPerformed(ActionEvent e) {
-//                saveToFile();
-//            }
-//        });
-//
-//        saveAsMenuItem.addActionListener(new ActionListener() {
-//            @Override
-//            public void actionPerformed(ActionEvent e) {
-//                saveAsToFile();
-//            }
-//        });
-//
-//        openMenuItem.addActionListener(new ActionListener() {
-//            @Override
-//            public void actionPerformed(ActionEvent e) {
-//                openFile();
-//            }
-//        });
+        openMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
+        saveMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
+        saveAsMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        quitMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q, InputEvent.CTRL_DOWN_MASK));
+
+        FileNameExtensionFilter filter = new FileNameExtensionFilter("Simple Graphics Editor Files", "sge");
+        saveMenuItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (getTitle().equals("Simple Draw")) {
+                    JFileChooser fileChooser = new JFileChooser();
+                    fileChooser.setFileFilter(filter);
+
+                    if (fileChooser.showSaveDialog(Main.this) == JFileChooser.APPROVE_OPTION) {
+                        File file = fileChooser.getSelectedFile();
+                        if (!file.getName().toLowerCase().endsWith(".sge")) {
+                            file = new File(file.getParentFile(), file.getName() + ".sge");
+                        }
+                        panel.saveToFile(file);
+                        currentAppTitle = "Simple Draw: " + file.getName();
+                        updateTitle();
+                        fileLoadedPath = file.getAbsolutePath();
+                    }
+                }else{
+                    File file = new File(fileLoadedPath);
+                    panel.saveToFile(file);
+                }
+            }
+        });
+
+        saveAsMenuItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setFileFilter(filter);
+                if (fileChooser.showSaveDialog(Main.this) == JFileChooser.APPROVE_OPTION) {
+                    File file = fileChooser.getSelectedFile();
+                    if (!file.getName().toLowerCase().endsWith(".sge")) {
+                        file = new File(file.getParentFile(), file.getName() + ".sge");
+                    }
+                    panel.saveToFile(file);
+                    currentAppTitle = "Simple Draw: " + file.getName();
+                    updateTitle();
+                    fileLoadedPath = file.getAbsolutePath();
+                }
+            }
+        });
+
+        openMenuItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setFileFilter(filter);
+                if (fileChooser.showOpenDialog(Main.this) == JFileChooser.APPROVE_OPTION) {
+                    File file = fileChooser.getSelectedFile();
+                    currentAppTitle = "Simple Draw: " + file.getName();
+                    updateTitle();
+                    fileLoadedPath = file.getAbsolutePath();
+                    panel.loadFromFile(file);
+                }
+            }
+        });
+
+        var thisHelper = this;
+        quitMenuItem.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                handleExit();
+            }
+        });
 
         JMenu drawMenu = new JMenu("Draw");
 
@@ -129,6 +187,7 @@ public class Main extends JFrame {
 
         drawMenu.add(figureMenuInner);
         drawMenu.add(colorItem);
+        drawMenu.addSeparator();
         drawMenu.add(clearItem);
 
         menuBar.add(fileMenu);
@@ -143,9 +202,40 @@ public class Main extends JFrame {
         toolBar.setFloatable(false);
 
         toolBar.add(new JLabel("Mode: "));
-        toolBar.add(modeLabel);
+        toolBar.add(this.modeLabel);
+        toolBar.add(Box.createHorizontalGlue());
+        toolBar.add(this.statusLabel);
 
         return toolBar;
+    }
+    private void handleExit() {
+        if (!panel.getIsSaved()) {
+            int option = JOptionPane.showConfirmDialog(this,
+                    "Do you want to save changes before quitting?",
+                    "Unsaved Changes",
+                    JOptionPane.YES_NO_CANCEL_OPTION);
+
+            if (option == JOptionPane.YES_OPTION) {
+                saveFileAndExit();
+            } else if (option == JOptionPane.NO_OPTION) {
+                System.exit(0);
+            }
+            // If option is JOptionPane.CANCEL_OPTION or dialog closed, do nothing (cancel exit)
+        } else {
+            System.exit(0);
+        }
+    }
+    private void saveFileAndExit() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Simple Graphics Editor Files", "sge"));
+        if (fileChooser.showSaveDialog(Main.this) == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            if (!file.getName().toLowerCase().endsWith(".sge")) {
+                file = new File(file.getParentFile(), file.getName() + ".sge");
+            }
+            panel.saveToFile(file);
+            System.exit(0);
+        }
     }
 }
 
@@ -157,13 +247,27 @@ class MyPanel extends JPanel implements MouseListener, KeyListener, MouseMotionL
     private ArrayList<Shape> shapes = new ArrayList<>();
     private ArrayList<Line> lines = new ArrayList<>();
     private boolean deleteMode = false;
+    private boolean isSaved = false;
+    private boolean isModified = false;
+    private final JLabel statusLabel;
 
-    public MyPanel() {
+    public MyPanel(JLabel statusLabel) {
+        this.statusLabel = statusLabel;
         this.setPreferredSize(new Dimension(500, 400));
         this.addMouseListener(this);
         this.addKeyListener(this);
         this.addMouseMotionListener(this);
         this.setFocusable(true);
+        this.updateStatus();
+    }
+    private void updateStatus() {
+        if (this.isModified) {
+            statusLabel.setText("Modified");
+        } else if(!this.isSaved){
+            statusLabel.setText("New");
+        }else{
+            statusLabel.setText("Saved");
+        }
     }
 
     public void setCurrentShape(String shape) {
@@ -173,7 +277,33 @@ class MyPanel extends JPanel implements MouseListener, KeyListener, MouseMotionL
     public void setCursorColor() {
         this.cursorColor = JColorChooser.showDialog(this, "Choose color", Color.red);
     }
+    public void saveToFile(File file) {
+        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(file))) {
+            out.writeObject(shapes);
+            out.writeObject(lines);
+            this.isSaved = true;
+            this.isModified = false;
+            updateStatus();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
+    public boolean getIsSaved(){
+        return this.isSaved;
+    }
+    public void loadFromFile(File file) {
+        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(file))) {
+            shapes = (ArrayList<Shape>) in.readObject();
+            lines = (ArrayList<Line>) in.readObject();
+            repaint();
+            this.isSaved = true;
+            this.isModified =false;
+            updateStatus();
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+    }
     private void drawCircle(int x, int y) {
         int radius = 25;
         Circle circle = new Circle(x, y, radius);
@@ -209,8 +339,11 @@ class MyPanel extends JPanel implements MouseListener, KeyListener, MouseMotionL
         }
 
         if (!shapesToRemove.isEmpty()) {
+            deleteMode = false;
             int response = JOptionPane.showConfirmDialog(this, "Cofirm shape deletion", "Confirm Deletion", JOptionPane.YES_NO_OPTION);
             if (response == JOptionPane.YES_OPTION) {
+                isSaved = false;
+                this.updateStatus();
                 shapes.removeAll(shapesToRemove);
                 repaint();
             }
@@ -246,6 +379,9 @@ class MyPanel extends JPanel implements MouseListener, KeyListener, MouseMotionL
         this.y = e.getY();
         if (currentShape.equals("Pen") && !deleteMode) {
             drawPen(this.prevX, this.prevY, this.x, this.y);
+            this.isSaved = false;
+            this.isModified = true;
+            this.updateStatus();
             this.prevX = this.x;
             this.prevY = this.y;
         }
@@ -265,6 +401,9 @@ class MyPanel extends JPanel implements MouseListener, KeyListener, MouseMotionL
             } else if (currentShape.equals("Square")) {
                 drawSquare(this.x, this.y);
             }
+            this.isSaved = false;
+            this.isModified = true;
+            this.updateStatus();
         } else if (e.getKeyCode() == KeyEvent.VK_D) {
             deleteMode = true;
         }
@@ -295,10 +434,11 @@ class MyPanel extends JPanel implements MouseListener, KeyListener, MouseMotionL
 
     @Override
     public void keyTyped(KeyEvent e) {
+
     }
 }
 
-abstract class Shape {
+abstract class Shape implements Serializable {
     public abstract void draw(Graphics g);
     public abstract boolean contains(int x, int y);
 }
@@ -351,7 +491,7 @@ class Square extends Shape {
     }
 }
 
-class Line {
+class Line implements Serializable {
     int x1, y1, x2, y2;
     Color color;
 
